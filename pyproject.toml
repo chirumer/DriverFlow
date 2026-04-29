@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "driverflow"
+version = "0.1.0"
+description = "AI-powered image annotation tool for Google Colab"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+driverflow = [
+    "backend/app.py",
+    "backend/requirements.txt",
+    "backend/requirements_colab.txt",
+    "backend/static/app.js",
+    "backend/static/index.html",
+    "backend/static/style.css",
+]
