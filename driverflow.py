@@ -79,7 +79,7 @@ class DriverFlow:
 
     def _install_backend_deps(self):
         repo_dir = os.path.dirname(os.path.abspath(__file__))
-        req_file = os.path.join(repo_dir, "backend", "requirements.txt")
+        req_file = os.path.join(repo_dir, "backend", "requirements_colab.txt")
         print("Installing backend dependencies...")
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-q", "-r", req_file],
