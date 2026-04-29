@@ -90,14 +90,14 @@ class DriverFlow:
     def _start_backend(self):
         repo_dir = os.path.dirname(os.path.abspath(__file__))
         backend_dir = os.path.join(repo_dir, "backend")
-        print("Starting backend server...")
-        subprocess.Popen(
-            ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", str(self._PORT)],
+        print("Starting backend server (loading model, this may take a minute)...")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", str(self._PORT)],
             cwd=backend_dir,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
-        deadline = time.time() + 30
+        deadline = time.time() + 600
         while time.time() < deadline:
             try:
                 urllib.request.urlopen(f"http://localhost:{self._PORT}/", timeout=2)
@@ -105,7 +105,9 @@ class DriverFlow:
                 return
             except Exception:
                 time.sleep(0.5)
-        raise RuntimeError("Backend failed to start within 30 seconds.")
+        proc.kill()
+        stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Backend failed to start within 600 seconds.\n{stderr_output}")
 
     def _start_cloudflare_tunnel(self):
         if not os.path.exists(self._CLOUDFLARED_BIN):
