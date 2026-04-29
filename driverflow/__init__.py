@@ -97,6 +97,13 @@ class DriverFlow:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
+
+        def _stream_stderr():
+            for line in proc.stderr:
+                print(line.decode("utf-8", errors="replace"), end="", flush=True)
+
+        threading.Thread(target=_stream_stderr, daemon=True).start()
+
         deadline = time.time() + 600
         while time.time() < deadline:
             try:
@@ -106,8 +113,7 @@ class DriverFlow:
             except Exception:
                 time.sleep(0.5)
         proc.kill()
-        stderr_output = proc.stderr.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Backend failed to start within 600 seconds.\n{stderr_output}")
+        raise RuntimeError("Backend failed to start within 600 seconds.")
 
     def _start_cloudflare_tunnel(self):
         if not os.path.exists(self._CLOUDFLARED_BIN):
