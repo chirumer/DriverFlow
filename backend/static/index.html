@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DriverFlow - Annotation Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1>DriverFlow</h1>
+            <p class="subtitle">Intelligent Image Annotation</p>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="panel-left">
+            <div class="panel-title">Controls</div>
+
+            <div class="upload-zone" id="upload-zone">
+                <input type="file" id="file-input" accept="image/*" hidden>
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <p class="upload-text">Drag & drop image<br><span class="upload-subtext">or click to browse</span></p>
+            </div>
+
+            <div id="preview-container" class="preview-container" hidden>
+                <img id="preview" class="preview-image" alt="Preview">
+            </div>
+
+            <div class="control-group">
+                <label for="text-prompt" class="label">Text Prompt</label>
+                <input
+                    id="text-prompt"
+                    type="text"
+                    class="input"
+                    placeholder="e.g. car . person . traffic light"
+                >
+                <p class="hint">Separate classes with dots</p>
+            </div>
+
+            <div class="control-group">
+                <label for="box-threshold" class="label">
+                    Box Threshold: <span id="box-val" class="value">0.35</span>
+                </label>
+                <input
+                    id="box-threshold"
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.01"
+                    value="0.35"
+                    class="slider"
+                >
+            </div>
+
+            <div class="control-group">
+                <label for="text-threshold" class="label">
+                    Text Threshold: <span id="text-val" class="value">0.25</span>
+                </label>
+                <input
+                    id="text-threshold"
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.01"
+                    value="0.25"
+                    class="slider"
+                >
+            </div>
+
+            <button id="detect-btn" class="btn btn-primary" disabled>Detect</button>
+        </aside>
+
+        <section class="panel-right">
+            <div id="loading" class="loading-overlay" hidden>
+                <div class="spinner"></div>
+                <p>Running detection...</p>
+            </div>
+
+            <div id="results" class="results" hidden>
+                <div class="results-top">
+                    <img id="annotated-img" class="annotated-image" alt="Annotated image">
+                </div>
+
+                <div class="results-bottom">
+                    <div class="table-container">
+                        <table class="summary-table">
+                            <thead>
+                                <tr>
+                                    <th>Class</th>
+                                    <th>Count</th>
+                                    <th>Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summary-body"></tbody>
+                        </table>
+                    </div>
+
+                    <button id="download-btn" class="btn btn-download" hidden>
+                        ↓ Download YOLO Annotations
+                    </button>
+                </div>
+            </div>
+
+            <div id="empty-state" class="empty-state">
+                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <p>Upload an image and run detection to see results</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
