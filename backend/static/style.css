@@ -312,6 +312,10 @@ body {
     gap: 1rem;
 }
 
+.loading-overlay[hidden] {
+    display: none !important;
+}
+
 .spinner {
     width: 40px;
     height: 40px;
