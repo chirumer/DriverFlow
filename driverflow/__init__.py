@@ -54,19 +54,6 @@ class DriverFlow:
             text = text.replace("value.scalar_type().is_cuda()", "value.is_cuda()")
             open(cuda_file, "w").write(text)
 
-        # get_head_mask was removed from BertModel in newer transformers versions
-        bertwarper_file = os.path.join(
-            self._GDINO_DIR,
-            "groundingdino/models/GroundingDINO/bertwarper.py",
-        )
-        if os.path.exists(bertwarper_file):
-            text = open(bertwarper_file).read()
-            text = text.replace(
-                "self.get_head_mask = bert_model.get_head_mask",
-                'self.get_head_mask = getattr(bert_model, "get_head_mask", lambda m, n, c=False: [None]*n)',
-            )
-            open(bertwarper_file, "w").write(text)
-
         if importlib.util.find_spec("groundingdino") is None:
             print("Installing GroundingDINO (this may take a few minutes)...")
             subprocess.run(

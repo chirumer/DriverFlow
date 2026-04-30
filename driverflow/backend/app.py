@@ -10,6 +10,13 @@ from pathlib import Path
 
 HOME = "/content"
 
+import transformers
+
+if not hasattr(transformers.BertModel, "get_head_mask"):
+    def _get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
+        return [None] * num_hidden_layers if head_mask is None else head_mask
+    transformers.BertModel.get_head_mask = _get_head_mask
+
 os.chdir(f"{HOME}/GroundingDINO")
 from groundingdino.util.inference import load_model, load_image, predict, annotate
 os.chdir(HOME)
