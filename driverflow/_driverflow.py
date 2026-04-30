@@ -1,9 +1,13 @@
-"""Legacy DriverFlow UI launcher.
+"""Legacy DriverFlow UI launcher (kept under the name ``DriverFlowOld``).
 
 Boots the FastAPI annotation server bundled under ``backend/`` and exposes
 it via the Colab proxy or a Cloudflare quick tunnel. The data-science
 helpers (``Pipeline``, ``viz``, ``refine``) are an additive alternative for
 notebooks that don't need the full UI.
+
+The current ``DriverFlow`` class lives in ``_driverflow_new.py`` and runs
+the new workspace UI under ``webui/``. This module preserves the original
+single-page detect-only flow for back-compat with existing notebooks.
 """
 
 import os
@@ -17,7 +21,7 @@ import urllib.request
 from . import setup as _setup
 
 
-class DriverFlow:
+class DriverFlowOld:
     _CLOUDFLARED_BIN = "/usr/local/bin/cloudflared"
     _CLOUDFLARED_URL = (
         "https://github.com/cloudflare/cloudflared/releases/latest/download/"

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DriverFlow Workspace</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <h1>DriverFlow</h1>
+            <p class="subtitle">Workspace</p>
+            <div class="header-actions">
+                <button id="btn-import" class="btn btn-ghost">＋ Import</button>
+                <button id="btn-cloud" class="btn btn-ghost">☁ DriverFlow Cloud</button>
+                <input type="file" id="file-input" accept="image/*,video/*,.zip" multiple hidden>
+            </div>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="panel-left" id="sidebar">
+            <div class="sidebar-filters">
+                <div class="filter-group" id="filter-media">
+                    <label><input type="checkbox" value="image" checked> Images</label>
+                    <label><input type="checkbox" value="video" checked> Videos</label>
+                </div>
+            </div>
+            <div class="sidebar-sections" id="sidebar-sections"></div>
+        </aside>
+
+        <section class="panel-center">
+            <div class="workspace" id="workspace">
+                <div class="workspace-toolbar">
+                    <div class="working-name" id="working-name">No item selected</div>
+                    <div class="workspace-actions">
+                        <button id="btn-export" class="btn btn-success" disabled>↓ Export</button>
+                    </div>
+                </div>
+                <div class="preview" id="preview">
+                    <div class="empty-state">
+                        <p>Drag an image or video here, or pick one from the sidebar.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="data-workspace" id="data-workspace">
+                <div class="dw-header">
+                    <h3>Data Workspace</h3>
+                    <p class="hint">Versions of the working item — drag any back onto the preview.</p>
+                </div>
+                <div class="dw-cards" id="dw-cards"></div>
+            </div>
+        </section>
+
+        <aside class="panel-right">
+            <section class="tools-section">
+                <div class="panel-title">Tools</div>
+                <div id="tools" class="tools"></div>
+                <div id="tool-params" class="tool-params"></div>
+            </section>
+            <section class="models-section" id="models-section">
+                <div class="panel-title">
+                    <span>Models</span>
+                    <button id="btn-toggle-models" class="btn btn-ghost mini">−</button>
+                </div>
+                <div class="models" id="models"></div>
+            </section>
+        </aside>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <div id="modal-confirm" class="modal" hidden>
+        <div class="modal-box">
+            <h3 id="modal-confirm-title">Replace working item?</h3>
+            <p id="modal-confirm-body">Replacing will lose unsaved work — continue?</p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="modal-confirm-cancel">Cancel</button>
+                <button class="btn btn-primary" id="modal-confirm-ok">Replace</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-cloud" class="modal" hidden>
+        <div class="modal-box modal-cloud">
+            <h3>DriverFlow Cloud (mock)</h3>
+            <p class="hint">Selecting items materializes them as plain 500x500 white PNGs (images) or 2-second blank MP4s (videos).</p>
+            <div class="cloud-tree" id="cloud-tree"></div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="modal-cloud-cancel">Cancel</button>
+                <button class="btn btn-primary" id="modal-cloud-import">Import Selected</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

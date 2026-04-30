@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "driverflow"
-version = "0.4.0"
+version = "0.5.0"
 description = "AI-powered image annotation and segmentation tool for Google Colab (UI + library API for Grounding DINO + SAM 2)"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -36,4 +36,8 @@ driverflow = [
     "backend/static/app.js",
     "backend/static/index.html",
     "backend/static/style.css",
+    "webui/static/index.html",
+    "webui/static/style.css",
+    "webui/static/js/*.js",
+    "webui/static/js/ui/*.js",
 ]

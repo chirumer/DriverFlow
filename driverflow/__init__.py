@@ -2,10 +2,15 @@
 
 Two ways to use this package:
 
-  * UI mode (FastAPI server with HTML annotator)::
+  * UI mode (FastAPI workspace with versioned data, all Pipeline tools)::
 
         from driverflow import DriverFlow
         DriverFlow().start()
+
+  * Legacy single-page detect-only UI (kept for back-compat)::
+
+        from driverflow import DriverFlowOld
+        DriverFlowOld().start()
 
   * Library mode (call DINO + SAM 2 directly from a notebook)::
 
@@ -20,7 +25,8 @@ sam2 are imported lazily inside ``Pipeline._load_*`` and ``viz.*``.
 """
 
 from . import viz
-from ._driverflow import DriverFlow
+from ._driverflow import DriverFlowOld
+from ._driverflow_new import DriverFlow
 from .pipeline import Pipeline
 from .refine import ClickSession
 from .setup import (
@@ -34,6 +40,7 @@ from .types import Detections, SegResult
 
 __all__ = [
     "DriverFlow",
+    "DriverFlowOld",
     "Pipeline",
     "Detections",
     "SegResult",
