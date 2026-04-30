@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "driverflow"
-version = "0.3.1"
-description = "AI-powered image annotation tool for Google Colab"
+version = "0.4.0"
+description = "AI-powered image annotation and segmentation tool for Google Colab (UI + library API for Grounding DINO + SAM 2)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
