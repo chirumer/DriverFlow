@@ -1,175 +1,47 @@
-import importlib.util
-import os
-import re
-import subprocess
-import sys
-import threading
-import time
-import urllib.request
+"""DriverFlow — image annotation and segmentation tooling for Colab.
 
+Two ways to use this package:
 
-class DriverFlow:
-    _GDINO_DIR = "/content/GroundingDINO"
-    _WEIGHTS_DIR = "/content/weights"
-    _WEIGHTS_FILE = "/content/weights/groundingdino_swint_ogc.pth"
-    _WEIGHTS_URL = (
-        "https://github.com/IDEA-Research/GroundingDINO/releases/download/"
-        "v0.1.0-alpha/groundingdino_swint_ogc.pth"
-    )
-    _GDINO_URL = "https://github.com/IDEA-Research/GroundingDINO.git"
-    _CLOUDFLARED_BIN = "/usr/local/bin/cloudflared"
-    _CLOUDFLARED_URL = (
-        "https://github.com/cloudflare/cloudflared/releases/latest/download/"
-        "cloudflared-linux-amd64"
-    )
-    _PORT = 8000
+  * UI mode (FastAPI server with HTML annotator)::
 
-    def start(self, tunnel=False):
-        self._setup_groundingdino()
-        self._download_weights()
-        self._install_backend_deps()
-        self._start_backend()
-        url = self._start_cloudflare_tunnel() if tunnel else self._get_colab_url()
-        self._print_banner(url, tunnel)
+        from driverflow import DriverFlow
+        DriverFlow().start()
 
-    # ------------------------------------------------------------------
+  * Library mode (call DINO + SAM 2 directly from a notebook)::
 
-    def _setup_groundingdino(self):
-        if not os.path.exists(self._GDINO_DIR):
-            print("Cloning GroundingDINO...")
-            subprocess.run(
-                ["git", "clone", self._GDINO_URL, self._GDINO_DIR],
-                check=True, capture_output=True,
-            )
-        else:
-            print("GroundingDINO directory already present.")
+        from driverflow import Pipeline, viz
+        pipe = Pipeline().setup(dino=True, sam=True)
+        det  = pipe.detect("image.jpg", prompt="car . person")
+        seg  = pipe.segment(det)
+        viz.show_masks(seg)
 
-        cuda_file = os.path.join(
-            self._GDINO_DIR,
-            "groundingdino/models/GroundingDINO/csrc/MsDeformAttn/ms_deform_attn_cuda.cu",
-        )
-        if os.path.exists(cuda_file):
-            text = open(cuda_file).read()
-            text = text.replace("value.type()", "value.scalar_type()")
-            text = text.replace("value.scalar_type().is_cuda()", "value.is_cuda()")
-            open(cuda_file, "w").write(text)
+The top-level import is intentionally cheap: torch, groundingdino, and
+sam2 are imported lazily inside ``Pipeline._load_*`` and ``viz.*``.
+"""
 
-        if importlib.util.find_spec("groundingdino") is None:
-            print("Installing GroundingDINO (this may take a few minutes)...")
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-q", "-e", "."],
-                cwd=self._GDINO_DIR, check=True,
-            )
-        else:
-            print("GroundingDINO already installed.")
+from . import viz
+from ._driverflow import DriverFlow
+from .pipeline import Pipeline
+from .refine import ClickSession
+from .setup import (
+    download_dino_weights,
+    ensure_dino,
+    ensure_sam2,
+    setup_groundingdino,
+    setup_sam2,
+)
+from .types import Detections, SegResult
 
-        print("✓ GroundingDINO ready.")
-
-    def _download_weights(self):
-        os.makedirs(self._WEIGHTS_DIR, exist_ok=True)
-        if not os.path.exists(self._WEIGHTS_FILE):
-            print("Downloading model weights (this may take a few minutes)...")
-            subprocess.run(
-                ["wget", "-q", "-O", self._WEIGHTS_FILE, self._WEIGHTS_URL],
-                check=True,
-            )
-            print("✓ Weights downloaded.")
-        else:
-            print("✓ Weights already present.")
-
-    def _install_backend_deps(self):
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
-        req_file = os.path.join(repo_dir, "backend", "requirements_colab.txt")
-        print("Installing backend dependencies...")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-q", "-r", req_file],
-            check=True,
-        )
-        print("✓ Dependencies installed.")
-
-    def _start_backend(self):
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
-        backend_dir = os.path.join(repo_dir, "backend")
-        print("Starting backend server (loading model, this may take a minute)...")
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", str(self._PORT)],
-            cwd=backend_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-
-        def _stream_stderr():
-            for line in proc.stderr:
-                print(line.decode("utf-8", errors="replace"), end="", flush=True)
-
-        threading.Thread(target=_stream_stderr, daemon=True).start()
-
-        deadline = time.time() + 600
-        while time.time() < deadline:
-            try:
-                urllib.request.urlopen(f"http://localhost:{self._PORT}/", timeout=2)
-                print("✓ Backend is up.")
-                return
-            except Exception:
-                time.sleep(0.5)
-        proc.kill()
-        raise RuntimeError("Backend failed to start within 600 seconds.")
-
-    def _start_cloudflare_tunnel(self):
-        if not os.path.exists(self._CLOUDFLARED_BIN):
-            print("Downloading cloudflared...")
-            subprocess.run(
-                ["wget", "-q", "-O", self._CLOUDFLARED_BIN, self._CLOUDFLARED_URL],
-                check=True,
-            )
-            os.chmod(self._CLOUDFLARED_BIN, 0o755)
-
-        print("Starting Cloudflare tunnel...")
-        proc = subprocess.Popen(
-            [self._CLOUDFLARED_BIN, "tunnel", "--url", f"http://localhost:{self._PORT}"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-
-        url_found = threading.Event()
-        url_result = []
-
-        def _reader():
-            for raw in proc.stdout:
-                line = raw.decode("utf-8", errors="replace")
-                m = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line)
-                if m:
-                    url_result.append(m.group(0))
-                    url_found.set()
-                    return
-
-        threading.Thread(target=_reader, daemon=True).start()
-
-        if not url_found.wait(timeout=30):
-            proc.kill()
-            raise RuntimeError("Cloudflare tunnel URL not found within 30 seconds.")
-
-        return url_result[0]
-
-    def _get_colab_url(self):
-        from google.colab.output import eval_js
-        return eval_js(f"google.colab.kernel.proxyPort({self._PORT})")
-
-    def _print_banner(self, url, tunnel):
-        lines = [
-            "╔══════════════════════════════════════════╗",
-            "║         DriverFlow is LIVE!              ║",
-            "║                                          ║",
-            "║  Open this URL in your browser:          ║",
-            f"║  {url:<40}║",
-            "║                                          ║",
-        ]
-        if not tunnel:
-            lines += [
-                "║  Note: Colab proxy may expire on         ║",
-                "║  inactivity. Use tunnel=True for a       ║",
-                "║  persistent public URL.                  ║",
-                "║                                          ║",
-            ]
-        lines.append("╚══════════════════════════════════════════╝")
-        print("\n" + "\n".join(lines) + "\n")
+__all__ = [
+    "DriverFlow",
+    "Pipeline",
+    "Detections",
+    "SegResult",
+    "ClickSession",
+    "viz",
+    "setup_groundingdino",
+    "download_dino_weights",
+    "setup_sam2",
+    "ensure_dino",
+    "ensure_sam2",
+]
