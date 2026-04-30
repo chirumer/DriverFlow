@@ -69,6 +69,17 @@ def setup_groundingdino(verbose: bool = True) -> None:
     else:
         _say(verbose, "GroundingDINO already installed.")
 
+    # GroundingDINO + newer transformers crash with
+    # "BertModel has no attribute 'get_head_mask'". Pin to the version the
+    # reference notebook uses. Always re-run pip — cheap if already pinned,
+    # and fixes pre-existing environments where transformers is too new.
+    _say(verbose, "Pinning transformers==4.38.2 and installing supervision...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q",
+         "supervision", "transformers==4.38.2"],
+        check=True,
+    )
+
     _say(verbose, "GroundingDINO ready.")
 
 
