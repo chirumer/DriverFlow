@@ -10,20 +10,6 @@ from pathlib import Path
 
 HOME = "/content"
 
-import torch
-import transformers
-
-if not hasattr(transformers.BertModel, "get_head_mask"):
-    def _get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
-        return [None] * num_hidden_layers if head_mask is None else head_mask
-    transformers.BertModel.get_head_mask = _get_head_mask
-
-_orig_get_ext = transformers.BertModel.get_extended_attention_mask
-def _patched_get_extended_attention_mask(self, attention_mask, input_shape, *args, **kwargs):
-    args = tuple(a for a in args if not isinstance(a, torch.device))
-    return _orig_get_ext(self, attention_mask, input_shape, *args, **kwargs)
-transformers.BertModel.get_extended_attention_mask = _patched_get_extended_attention_mask
-
 os.chdir(f"{HOME}/GroundingDINO")
 from groundingdino.util.inference import load_model, load_image, predict, annotate
 os.chdir(HOME)

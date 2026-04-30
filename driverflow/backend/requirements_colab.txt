@@ -2,7 +2,5 @@ fastapi==0.111.0
 uvicorn[standard]==0.29.0
 python-multipart==0.0.9
 pyngrok==7.1.6
-supervision>=0.21.0
-numpy>=1.26,<3
-transformers>=4.38.2
-pillow>=10.3.0
+supervision==0.19.0
+transformers==4.38.2
