@@ -79,8 +79,10 @@ class Pipeline:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         if self.device == "cuda" and torch.cuda.is_available():
-            # Match the reference notebook: bfloat16 autocast + TF32 on Ampere+
-            torch.autocast("cuda", dtype=torch.bfloat16).__enter__()
+            # TF32 is global and harmless for both DINO and SAM 2.
+            # Do NOT enable bfloat16 autocast globally — GroundingDINO's
+            # ms_deform_attn CUDA kernel doesn't support BFloat16. Autocast
+            # is scoped per-call inside segment / apply_refinements instead.
             if torch.cuda.get_device_properties(0).major >= 8:
                 torch.backends.cuda.matmul.allow_tf32 = True
                 torch.backends.cudnn.allow_tf32 = True
@@ -90,6 +92,15 @@ class Pipeline:
 
         sam_model = build_sam2(_setup.SAM2_CFG, _setup.SAM2_WEIGHTS, device=self.device)
         self.sam_predictor = SAM2ImagePredictor(sam_model)
+
+    def _sam_autocast(self):
+        """Context manager: bfloat16 autocast on CUDA, no-op on CPU."""
+        import contextlib
+        import torch
+
+        if self.device == "cuda" and torch.cuda.is_available():
+            return torch.autocast("cuda", dtype=torch.bfloat16)
+        return contextlib.nullcontext()
 
     # ------------------------------------------------------------------ detect
 
@@ -149,13 +160,14 @@ class Pipeline:
 
         import numpy as np
 
-        self.sam_predictor.set_image(det.image_source)
-        masks, iou_scores, _ = self.sam_predictor.predict(
-            point_coords=None,
-            point_labels=None,
-            box=det.boxes_xyxy,
-            multimask_output=False,
-        )
+        with self._sam_autocast():
+            self.sam_predictor.set_image(det.image_source)
+            masks, iou_scores, _ = self.sam_predictor.predict(
+                point_coords=None,
+                point_labels=None,
+                box=det.boxes_xyxy,
+                multimask_output=False,
+            )
         masks = np.asarray(masks)
         if masks.ndim == 4:  # (N, 1, H, W) -> (N, H, W)
             masks = masks.squeeze(1)
@@ -207,29 +219,30 @@ class Pipeline:
             assignments[idx][0].append(pt.tolist())
             assignments[idx][1].append(int(lb))
 
-        self.sam_predictor.set_image(seg.image_source)
-
         refined = list(seg.masks)
         refined_iou = list(seg.iou_scores) if hasattr(seg.iou_scores, "__iter__") else [None] * len(boxes)
 
-        for i in range(len(boxes)):
-            pts_i, lbs_i = assignments[i]
-            if not pts_i:
-                continue
-            new_mask, new_iou, _ = self.sam_predictor.predict(
-                point_coords=np.asarray(pts_i, dtype=float),
-                point_labels=np.asarray(lbs_i, dtype=int),
-                box=np.asarray(boxes[i])[None, :],
-                multimask_output=False,
-            )
-            m = np.asarray(new_mask)
-            if m.ndim == 3:
-                m = m.squeeze(0)
-            refined[i] = m.astype(bool)
-            iou_arr = np.asarray(new_iou).reshape(-1)
-            refined_iou[i] = float(iou_arr[0]) if iou_arr.size else None
+        with self._sam_autocast():
+            self.sam_predictor.set_image(seg.image_source)
 
-            print(f"Box {i}: refined with {len(pts_i)} point(s).")
+            for i in range(len(boxes)):
+                pts_i, lbs_i = assignments[i]
+                if not pts_i:
+                    continue
+                new_mask, new_iou, _ = self.sam_predictor.predict(
+                    point_coords=np.asarray(pts_i, dtype=float),
+                    point_labels=np.asarray(lbs_i, dtype=int),
+                    box=np.asarray(boxes[i])[None, :],
+                    multimask_output=False,
+                )
+                m = np.asarray(new_mask)
+                if m.ndim == 3:
+                    m = m.squeeze(0)
+                refined[i] = m.astype(bool)
+                iou_arr = np.asarray(new_iou).reshape(-1)
+                refined_iou[i] = float(iou_arr[0]) if iou_arr.size else None
+
+                print(f"Box {i}: refined with {len(pts_i)} point(s).")
 
         return SegResult(
             masks=np.stack(refined, axis=0),
