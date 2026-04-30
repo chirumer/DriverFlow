@@ -11,7 +11,7 @@ from pathlib import Path
 HOME = "/content"
 
 os.chdir(f"{HOME}/GroundingDINO")
-from groundingdino.util.inference import load_model, load_image, predict, annotate
+from groundingdino.util.inference import load_model, load_image, predict
 os.chdir(HOME)
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
@@ -31,6 +31,49 @@ app = FastAPI()
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _annotate_image(image_source, boxes, logits, phrases):
+    frame = image_source[:, :, ::-1].copy()
+    height, width = frame.shape[:2]
+    boxes_list = boxes.cpu().tolist() if hasattr(boxes, "cpu") else boxes.tolist()
+    logits_list = logits.cpu().tolist() if hasattr(logits, "cpu") else logits.tolist()
+
+    for box, logit, phrase in zip(boxes_list, logits_list, phrases):
+        cx, cy, box_w, box_h = box
+        x1 = int((cx - box_w / 2) * width)
+        y1 = int((cy - box_h / 2) * height)
+        x2 = int((cx + box_w / 2) * width)
+        y2 = int((cy + box_h / 2) * height)
+
+        x1 = max(0, min(width - 1, x1))
+        y1 = max(0, min(height - 1, y1))
+        x2 = max(0, min(width - 1, x2))
+        y2 = max(0, min(height - 1, y2))
+
+        label = f"{phrase} {logit:.2f}"
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        (label_w, label_h), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+        )
+        label_y1 = max(0, y1 - label_h - baseline - 6)
+        label_y2 = label_y1 + label_h + baseline + 6
+        label_x2 = min(width - 1, x1 + label_w + 8)
+
+        cv2.rectangle(frame, (x1, label_y1), (label_x2, label_y2), (0, 255, 0), -1)
+        cv2.putText(
+            frame,
+            label,
+            (x1 + 4, label_y2 - baseline - 3),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 0),
+            1,
+            cv2.LINE_AA,
+        )
+
+    return frame
 
 
 @app.get("/")
@@ -87,12 +130,7 @@ async def detect(
                 for cls, counts in sorted(class_counts.items())
             ]
 
-            annotated_frame = annotate(
-                image_source=image_source,
-                boxes=boxes,
-                logits=logits,
-                phrases=phrases,
-            )
+            annotated_frame = _annotate_image(image_source, boxes, logits, phrases)
 
             _, buffer = cv2.imencode(".jpg", annotated_frame)
             img_b64 = base64.b64encode(buffer).decode("utf-8")
