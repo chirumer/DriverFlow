@@ -166,3 +166,76 @@ def test_tool_rejects_wrong_media_type():
     resp = c.post("/api/tools/parent_echo", json={"item_id": item.id})
 
     assert resp.status_code == 409
+
+
+def test_annotate_tool_creates_detected_version_without_model():
+    c = client()
+    upload = c.post(
+        "/api/import/upload",
+        files=[("files", ("manual.png", png_bytes(), "image/png"))],
+    )
+    item = upload.json()["items"][0]
+    raw = item["versions"][0]
+
+    registry = c.get("/api/tools/registry").json()["tools"]
+    annotate = next(tool for tool in registry if tool["name"] == "annotate")
+    assert annotate["requires_model"] is None
+    assert annotate["input_kinds"] == ["raw"]
+
+    resp = c.post(
+        "/api/tools/annotate",
+        json={
+            "item_id": item["id"],
+            "parent_version_id": raw["id"],
+            "boxes": [
+                {"x1": 1, "y1": 2, "x2": 12, "y2": 10, "label": "car"},
+                {"x1": 3, "y1": 1, "x2": 9, "y2": 8, "label": "person"},
+            ],
+        },
+    )
+
+    assert resp.status_code == 200
+    version = resp.json()["version"]
+    assert version["kind"] == "detected"
+    assert version["parent_id"] == raw["id"]
+    assert version["summary"]["n_boxes"] == 2
+    assert version["summary"]["class_counts"] == {"car": 1, "person": 1}
+
+    preview = c.get(f"/api/preview/{item['id']}?version={version['id']}")
+    exported = c.get(f"/api/export/{item['id']}?version={version['id']}")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-type"].startswith("image/jpeg")
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("application/zip")
+
+
+def test_annotate_tool_validates_boxes_and_media_type():
+    c = client()
+    image = WORKSPACE.add_item(name="manual.png", media_type="image", raw_payload=png_bytes())
+    video = WORKSPACE.add_item(name="manual.mp4", media_type="video", raw_payload=b"video")
+
+    empty = c.post(
+        "/api/tools/annotate",
+        json={"item_id": image.id, "parent_version_id": image.versions[0].id, "boxes": []},
+    )
+    missing_label = c.post(
+        "/api/tools/annotate",
+        json={
+            "item_id": image.id,
+            "parent_version_id": image.versions[0].id,
+            "boxes": [{"x1": 1, "y1": 1, "x2": 5, "y2": 5, "label": ""}],
+        },
+    )
+    wrong_media = c.post(
+        "/api/tools/annotate",
+        json={
+            "item_id": video.id,
+            "parent_version_id": video.versions[0].id,
+            "boxes": [{"x1": 1, "y1": 1, "x2": 5, "y2": 5, "label": "car"}],
+        },
+    )
+
+    assert empty.status_code == 409
+    assert missing_label.status_code == 409
+    assert wrong_media.status_code == 409

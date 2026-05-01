@@ -8,6 +8,7 @@ import { showToast } from "./toast.js";
 import * as modelPanel from "./model-panel.js";
 import { addLoadingCard, replaceLoadingCard } from "./data-workspace.js";
 import { activateRefineCanvas, deactivateRefineCanvas } from "./refine-canvas.js";
+import { activateAnnotateCanvas, deactivateAnnotateCanvas } from "./annotate-canvas.js";
 
 const toolsRoot = document.getElementById("tools");
 const paramsRoot = document.getElementById("tool-params");
@@ -68,7 +69,11 @@ function evalGate(tool) {
     return { enabled: true };
 }
 
-function clearParams() { paramsRoot.innerHTML = ""; deactivateRefineCanvas(); }
+function clearParams() {
+    paramsRoot.innerHTML = "";
+    deactivateRefineCanvas();
+    deactivateAnnotateCanvas();
+}
 
 function render() {
     toolsRoot.innerHTML = "";
@@ -128,10 +133,20 @@ function showParamsFor(tool) {
         return;
     }
 
+    if (tool.name === "annotate") {
+        activateAnnotateCanvas(async (boxes) => {
+            await runWithLoading(tool, { boxes });
+            deactivateAnnotateCanvas();
+            activeToolName = null;
+            render();
+        });
+        return;
+    }
+
     const form = document.createElement("form");
     const values = {};
     for (const param of tool.params) {
-        if (param.type === "points" || param.type === "labels") continue;
+        if (param.type === "points" || param.type === "labels" || param.type === "boxes") continue;
         const field = document.createElement("div");
         field.className = "field";
 

@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 def _register_builtins() -> None:
     """Import-and-register every built-in tool + exporter."""
     # Side-effect imports that call register() at module scope.
+    from .tools import annotate as _annotate_tool  # noqa: F401
     from .tools import detect as _detect_tool  # noqa: F401
     from .tools import segment as _segment_tool  # noqa: F401
     from .tools import refine as _refine_tool  # noqa: F401
