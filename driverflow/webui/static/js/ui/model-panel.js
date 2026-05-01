@@ -23,7 +23,30 @@ toggleBtn.addEventListener("click", () => {
 state.on("models:changed", render);
 state.on("highlight:changed", render);
 
+function injectStyles() {
+    if (document.getElementById("df-model-styles")) return;
+    const style = document.createElement("style");
+    style.id = "df-model-styles";
+    style.textContent = `
+        .model-load-progress {
+            width: 60px; height: 4px; background: rgba(0,0,0,0.1);
+            border-radius: 2px; overflow: hidden; position: relative;
+        }
+        .model-button.loaded .model-load-progress { background: rgba(255,255,255,0.2); }
+        .model-load-bar {
+            width: 40%; height: 100%; background: var(--accent, #3b82f6);
+            position: absolute; animation: df-indeterminate 1.5s infinite linear;
+        }
+        @keyframes df-indeterminate {
+            0% { left: -40%; }
+            100% { left: 100%; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 export async function init() {
+    injectStyles();
     try {
         const status = await api.getModelsStatus();
         state.setModels(status);
@@ -51,7 +74,10 @@ function render() {
         btn.addEventListener("click", async () => {
             btn.disabled = true;
             const original = btn.innerHTML;
-            btn.innerHTML = `<span>${m.label}</span><span>Loading…</span>`;
+            btn.innerHTML = `
+                <span>${m.label}</span>
+                <div class="model-load-progress"><div class="model-load-bar"></div></div>
+            `;
             try {
                 const res = await m.load();
                 state.setModels({ [m.name]: !!res.loaded, device: res.device });

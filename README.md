@@ -1,108 +1,76 @@
-# DriverFlow
+# DriverFlow — Intelligent Image Annotation Tool
 
-DriverFlow is an AI-assisted image annotation and segmentation workspace for
-Google Colab. It combines Grounding DINO detection, SAM 2 segmentation, click
-refinement, versioned previews, and YOLO/raw-media export in a browser UI.
+A cloud-ready annotation tool powered by **GroundingDINO** and **SAM 2** for zero-shot object detection and instance segmentation. Runs entirely in Google Colab — no local setup required.
 
-## Quick Start
+## Features
+
+- **Zero-shot detection** — detect any objects using natural language prompts
+- **Instance Segmentation** — generate precise masks for detected objects using SAM 2
+- **Interactive Refinement** — adjust masks with positive and negative point clicks
+- **Data Workspace** — upload media (images/video), track version history (raw → detected → segmented → refined)
+- **YOLO export** — download annotations as a ZIP with `annotations.txt` + `classes.txt`
+- **Cloudflare Tunnel** — optional persistent public URL with no account required
+
+## Quick Start (Google Colab)
 
 ```python
+# Upgrade uvicorn to ensure Python 3.12 compatibility in Colab
+!pip install -U "uvicorn>=0.29.0"
 !pip install driverflow
 
 from driverflow import DriverFlow
-
-DriverFlow().start()              # Colab proxy URL
-# DriverFlow().start(tunnel=True) # public Cloudflare quick-tunnel URL
+DriverFlow().start()               # Colab proxy URL
+# DriverFlow().start(tunnel=True)  # persistent public URL via Cloudflare
 ```
 
-`DriverFlow` starts the current workspace UI. The older single-image,
-detect-only UI is still available as `DriverFlowOld` for backwards
-compatibility.
+`start()` handles everything: installing GroundingDINO, downloading model weights, installing dependencies, and launching the web UI.
 
-```python
-from driverflow import DriverFlowOld
+## Usage
 
-DriverFlowOld().start()
+1. **Upload an image** — drag and drop or click to browse
+2. **Enter a text prompt** — describe objects to detect, e.g. `car . person . traffic light`
+3. **Adjust thresholds** (optional)
+   - **Box Threshold** (default 0.35) — higher = only more confident detections
+   - **Text Threshold** (default 0.25) — higher = stricter text-alignment matching
+4. **Click Detect** — returns an annotated image and a summary table
+5. **Download** — export as YOLO format ZIP
+
+## YOLO Export Format
+
+**`annotations.txt`** — one detection per line:
 ```
-
-## Workspace UI
-
-The web UI lets you build a small in-memory workspace of images and videos:
-
-- Import images, videos, or zip files by dragging onto the page, clicking the
-  import button, or clicking the empty preview area.
-- Import from the mocked DriverFlow Cloud tree. Cloud is not implemented yet;
-  selected image files become 500x500 white PNGs and selected video files
-  become plain 2-second MP4s.
-- Use the left sidebar to browse raw, processed, and exported items with
-  image/video filters.
-- Click or drag one item into the preview area to make it the working item.
-- Use the right tools panel to run image tools. Videos can be organized,
-  previewed, and raw-exported, but no video tools are currently available.
-- Scroll to the Data Workspace to view every version of the working item:
-  raw media, detected boxes, segmented masks, and refined masks with clicks.
-- Click or drag any Data Workspace card into the preview area to make that
-  version authoritative for the next tool run or export.
-
-Replacing a dirty working item warns before switching away from unexported
-derived work.
-
-## Models And Tools
-
-Models are loaded on demand from the right-side model panel:
-
-- `Detect` requires Grounding DINO and a raw image version.
-- `Segment` requires SAM 2 and a detected image version with boxes.
-- `Refine` requires SAM 2 and a segmented or refined image version with masks.
-
-Trying to interact with a tool whose model is not loaded expands/highlights the
-required model. Heavy model dependencies and weights are installed lazily when
-models are loaded.
-
-## Export
-
-The export button exports exactly the version currently shown in the preview:
-
-- Raw image/video versions export the original media bytes.
-- Detected image versions export YOLO bounding-box annotations.
-- Segmented or refined image versions export YOLO segmentation annotations.
-
-YOLO exports are ZIP files containing `classes.txt` and `annotations.txt`.
-
-## Library API
-
-You can also use the pipeline directly from Python:
-
-```python
-from driverflow import Pipeline, viz
-
-pipe = Pipeline().setup(dino=True, sam=True)
-det = pipe.detect("image.jpg", prompt="car . person . traffic light")
-seg = pipe.segment(det)
-viz.show_masks(seg)
+<class_id> <cx> <cy> <w> <h>
 ```
+All coordinates are normalized (0–1). `class_id` is 0-based, sorted alphabetically.
 
-## Web API Shape
+**`classes.txt`** — one class name per line, alphabetically sorted.
 
-The workspace UI is backed by a local FastAPI server. The main endpoint groups
-are:
+## API
 
-- `POST /api/import/upload`
-- `GET /api/import/cloud_tree`
-- `POST /api/import/cloud_select`
-- `GET /api/items`
-- `GET /api/preview/{item_id}`
-- `GET /api/preview/thumb/{item_id}`
-- `GET /api/models/status`
-- `POST /api/models/load_dino`
-- `POST /api/models/load_sam`
-- `GET /api/tools/registry`
-- `POST /api/tools/{name}`
-- `GET /api/export/{item_id}`
+The tool runs a local FastAPI server with two endpoints:
 
-The old `/api/detect` and `/api/download_yolo` endpoints belong to the legacy
-`DriverFlowOld` UI.
+### `POST /api/detect`
+Multipart form: `image` (file), `text_prompt` (str), `box_threshold` (float), `text_threshold` (float).
+
+Returns JSON with `detections`, `class_counts`, `annotated_image_b64`, `image_width`, `image_height`.
+
+### `POST /api/download_yolo`
+JSON body: `detections`, `image_width`, `image_height`.
+
+Returns a ZIP file with `annotations.txt` and `classes.txt`.
+
+## Troubleshooting
+
+**Slow first run** — GroundingDINO (~400 MB) and model weights are downloaded on first `start()`. Subsequent runs in the same Colab session are fast.
+
+**Low confidence / missing detections** — lower the thresholds (e.g. 0.25 → 0.15) or use more specific prompts like `red car` instead of `car`.
+
+**Colab proxy expires** — use `tunnel=True` for a persistent Cloudflare URL.
+
+## Model
+
+GroundingDINO SwinT-OGC — Vision Transformer + BERT text encoder, ~400 MB checkpoint. Licensed under Apache 2.0 by IDEA-Research.
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

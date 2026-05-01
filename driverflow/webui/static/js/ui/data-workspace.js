@@ -22,13 +22,18 @@ let nextLoadingId = 0;
 const loadingCards = new Map();   // tempId -> element
 
 export function addLoadingCard(tool) {
+    const isQueued = loadingCards.size > 0;
     const tempId = `loading-${++nextLoadingId}`;
     const el = document.createElement("div");
     el.className = "dw-card loading";
     el.dataset.tempId = tempId;
+    const status = isQueued ? "Queued" : "Running";
     el.innerHTML = `
         <div class="spinner"></div>
-        <div class="dw-meta">Running ${tool.label}…</div>
+        <div class="dw-meta">${status} ${tool.label}…</div>
+        <div class="model-load-progress" style="width: 100%; margin-top: 8px;">
+            <div class="model-load-bar"></div>
+        </div>
     `;
     cardsRoot.appendChild(el);
     loadingCards.set(tempId, el);
@@ -47,6 +52,16 @@ export function replaceLoadingCard(tempId, version, errorText = null) {
     }
     el.remove();
     loadingCards.delete(tempId);
+
+    // Transition the next task in the queue to "Running"
+    const nextTask = loadingCards.values().next().value;
+    if (nextTask) {
+        const meta = nextTask.querySelector(".dw-meta");
+        if (meta && meta.textContent.includes("Queued")) {
+            meta.textContent = meta.textContent.replace("Queued", "Running");
+        }
+    }
+
     // The full re-render in render() picks up the new version from items[].
     render();
 }

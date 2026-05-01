@@ -9,6 +9,7 @@ hidden globals). All heavy imports are lazy and live inside ``_load_*`` so
 from __future__ import annotations
 
 import os
+import threading
 import tempfile
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Union
@@ -38,6 +39,7 @@ class Pipeline:
         self.device = device  # resolved on first SAM load if None
         self.dino_model = None
         self.sam_predictor = None
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ setup
 
@@ -49,12 +51,13 @@ class Pipeline:
         verbose: bool = True,
     ) -> "Pipeline":
         """Install + load the requested models. Idempotent."""
-        if dino:
-            _setup.ensure_dino(verbose=verbose)
-            self._load_dino()
-        if sam:
-            _setup.ensure_sam2(size=sam_size, verbose=verbose)
-            self._load_sam()
+        with self._lock:
+            if dino:
+                _setup.ensure_dino(verbose=verbose)
+                self._load_dino()
+            if sam:
+                _setup.ensure_sam2(size=sam_size, verbose=verbose)
+                self._load_sam()
         return self
 
     def _load_dino(self) -> None:
@@ -118,38 +121,38 @@ class Pipeline:
         import numpy as np
         import torch
 
-        prev_cwd = os.getcwd()
-        try:
-            os.chdir(_setup.GDINO_DIR)
-            from groundingdino.util.inference import load_image, predict  # type: ignore[import-not-found]
-        finally:
-            os.chdir(prev_cwd)
+        with self._lock:
+            prev_cwd = os.getcwd()
+            try:
+                os.chdir(_setup.GDINO_DIR)
+                from groundingdino.util.inference import load_image, predict  # type: ignore[import-not-found]
+                
+                with _as_local_path(image) as image_path:
+                    image_source, image_tensor = load_image(image_path)
+                    boxes, logits, phrases = predict(
+                        model=self.dino_model,
+                        image=image_tensor,
+                        caption=prompt,
+                        box_threshold=box_threshold,
+                        text_threshold=text_threshold,
+                    )
+            finally:
+                os.chdir(prev_cwd)
 
-        with _as_local_path(image) as image_path:
-            image_source, image_tensor = load_image(image_path)
+            H, W = image_source.shape[:2]
+            boxes_xyxy = _cxcywh_norm_to_xyxy_abs(boxes, W, H)
+            scores = logits.detach().cpu().numpy() if hasattr(logits, "detach") else np.asarray(logits)
 
-            boxes, logits, phrases = predict(
-                model=self.dino_model,
-                image=image_tensor,
-                caption=prompt,
-                box_threshold=box_threshold,
-                text_threshold=text_threshold,
+            return Detections(
+                image_source=image_source,
+                image_tensor=image_tensor,
+                boxes_cxcywh_norm=boxes,
+                boxes_xyxy=boxes_xyxy,
+                scores=scores,
+                phrases=list(phrases),
+                image_width=int(W),
+                image_height=int(H),
             )
-
-        H, W = image_source.shape[:2]
-        boxes_xyxy = _cxcywh_norm_to_xyxy_abs(boxes, W, H)
-        scores = logits.detach().cpu().numpy() if hasattr(logits, "detach") else np.asarray(logits)
-
-        return Detections(
-            image_source=image_source,
-            image_tensor=image_tensor,
-            boxes_cxcywh_norm=boxes,
-            boxes_xyxy=boxes_xyxy,
-            scores=scores,
-            phrases=list(phrases),
-            image_width=int(W),
-            image_height=int(H),
-        )
 
     # ------------------------------------------------------------------ segment
 
@@ -160,26 +163,27 @@ class Pipeline:
 
         import numpy as np
 
-        with self._sam_autocast():
-            self.sam_predictor.set_image(det.image_source)
-            masks, iou_scores, _ = self.sam_predictor.predict(
-                point_coords=None,
-                point_labels=None,
-                box=det.boxes_xyxy,
-                multimask_output=False,
-            )
-        masks = np.asarray(masks)
-        if masks.ndim == 4:  # (N, 1, H, W) -> (N, H, W)
-            masks = masks.squeeze(1)
-        masks = masks.astype(bool)
+        with self._lock:
+            with self._sam_autocast():
+                self.sam_predictor.set_image(det.image_source)
+                masks, iou_scores, _ = self.sam_predictor.predict(
+                    point_coords=None,
+                    point_labels=None,
+                    box=det.boxes_xyxy,
+                    multimask_output=False,
+                )
+            masks = np.asarray(masks)
+            if masks.ndim == 4:  # (N, 1, H, W) -> (N, H, W)
+                masks = masks.squeeze(1)
+            masks = masks.astype(bool)
 
-        return SegResult(
-            masks=masks,
-            iou_scores=np.asarray(iou_scores),
-            boxes_xyxy=det.boxes_xyxy,
-            phrases=list(det.phrases),
-            image_source=det.image_source,
-        )
+            return SegResult(
+                masks=masks,
+                iou_scores=np.asarray(iou_scores),
+                boxes_xyxy=det.boxes_xyxy,
+                phrases=list(det.phrases),
+                image_source=det.image_source,
+            )
 
     # ------------------------------------------------------------------ refine
 
@@ -222,27 +226,28 @@ class Pipeline:
         refined = list(seg.masks)
         refined_iou = list(seg.iou_scores) if hasattr(seg.iou_scores, "__iter__") else [None] * len(boxes)
 
-        with self._sam_autocast():
-            self.sam_predictor.set_image(seg.image_source)
+        with self._lock:
+            with self._sam_autocast():
+                self.sam_predictor.set_image(seg.image_source)
 
-            for i in range(len(boxes)):
-                pts_i, lbs_i = assignments[i]
-                if not pts_i:
-                    continue
-                new_mask, new_iou, _ = self.sam_predictor.predict(
-                    point_coords=np.asarray(pts_i, dtype=float),
-                    point_labels=np.asarray(lbs_i, dtype=int),
-                    box=np.asarray(boxes[i])[None, :],
-                    multimask_output=False,
-                )
-                m = np.asarray(new_mask)
-                if m.ndim == 3:
-                    m = m.squeeze(0)
-                refined[i] = m.astype(bool)
-                iou_arr = np.asarray(new_iou).reshape(-1)
-                refined_iou[i] = float(iou_arr[0]) if iou_arr.size else None
+                for i in range(len(boxes)):
+                    pts_i, lbs_i = assignments[i]
+                    if not pts_i:
+                        continue
+                    new_mask, new_iou, _ = self.sam_predictor.predict(
+                        point_coords=np.asarray(pts_i, dtype=float),
+                        point_labels=np.asarray(lbs_i, dtype=int),
+                        box=np.asarray(boxes[i])[None, :],
+                        multimask_output=False,
+                    )
+                    m = np.asarray(new_mask)
+                    if m.ndim == 3:
+                        m = m.squeeze(0)
+                    refined[i] = m.astype(bool)
+                    iou_arr = np.asarray(new_iou).reshape(-1)
+                    refined_iou[i] = float(iou_arr[0]) if iou_arr.size else None
 
-                print(f"Box {i}: refined with {len(pts_i)} point(s).")
+                    print(f"Box {i}: refined with {len(pts_i)} point(s).")
 
         return SegResult(
             masks=np.stack(refined, axis=0),
