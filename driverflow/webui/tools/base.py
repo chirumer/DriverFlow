@@ -42,6 +42,7 @@ class Tool(ABC):
     label: ClassVar[str] = ""
     requires_model: ClassVar[Optional[str]] = None  # "dino" | "sam" | None
     requires_input_kind: ClassVar[Optional[VersionKind]] = None
+    input_kinds: ClassVar[Optional[Tuple[VersionKind, ...]]] = None
     media_types: ClassVar[Tuple[str, ...]] = ("image",)
     params_schema: ClassVar[List[Dict[str, Any]]] = []
 
@@ -51,11 +52,15 @@ class Tool(ABC):
         raise NotImplementedError
 
     def descriptor(self) -> Dict[str, Any]:
+        accepted_kinds = self.input_kinds
+        if accepted_kinds is None and self.requires_input_kind is not None:
+            accepted_kinds = (self.requires_input_kind,)
         return {
             "name": self.name,
             "label": self.label or self.name.title(),
             "requires_model": self.requires_model,
             "requires_input_kind": self.requires_input_kind,
+            "input_kinds": list(accepted_kinds or []),
             "media_types": list(self.media_types),
             "params": list(self.params_schema),
         }

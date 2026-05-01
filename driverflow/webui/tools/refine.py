@@ -19,6 +19,7 @@ class RefineTool(Tool):
     label = "Refine"
     requires_model = "sam"
     requires_input_kind = "segmented"
+    input_kinds = ("segmented", "refined")
     media_types = ("image",)
     params_schema = [
         # The actual click collection happens in the front-end canvas overlay.

@@ -34,6 +34,14 @@ export function emit(eventName, payload) {
 export function setItems(items) {
     state.items = items;
     state.itemIndex = new Map(items.map((i) => [i.id, i]));
+    if (state.workingItem) {
+        const updated = state.itemIndex.get(state.workingItem.id);
+        if (updated) {
+            state.workingItem.name = updated.name;
+            state.workingItem.media_type = updated.media_type;
+            state.workingItem.versions = updated.versions || [];
+        }
+    }
     emit("items:changed", { items });
 }
 
@@ -44,12 +52,14 @@ export function setModels(s) {
 
 export function setWorkingItem(item, versionId = null) {
     if (item) {
+        const versions = item.versions || [];
+        const rawVersionId = versions[0]?.id || null;
         state.workingItem = {
             id: item.id,
             name: item.name,
             media_type: item.media_type,
-            currentVersionId: versionId,
-            versions: item.version_kinds || [],
+            currentVersionId: versionId || rawVersionId,
+            versions,
         };
     } else {
         state.workingItem = null;
@@ -63,7 +73,8 @@ export function setItem(updatedItem) {
     if (idx >= 0) state.items[idx] = updatedItem;
     if (state.workingItem && state.workingItem.id === updatedItem.id) {
         state.workingItem.name = updatedItem.name;
-        state.workingItem.versions = updatedItem.version_kinds || [];
+        state.workingItem.media_type = updatedItem.media_type;
+        state.workingItem.versions = updatedItem.versions || [];
     }
     emit("items:changed", { items: state.items });
     emit("working:changed", { workingItem: state.workingItem });
@@ -90,8 +101,20 @@ export function isWorkingDirty() {
     if (!wi) return false;
     const item = state.itemIndex.get(wi.id);
     if (!item) return false;
-    const kinds = item.version_kinds || [];
-    const hasDerived = kinds.some((k) => k !== "raw");
-    const wasExported = (item.sources || []).includes("exported");
-    return hasDerived && !wasExported;
+    const current = getCurrentVersion(item, wi.currentVersionId);
+    return !!current && current.kind !== "raw" && !current.exported;
+}
+
+export function getCurrentVersion(item, versionId = null) {
+    const versions = item?.versions || [];
+    if (!versions.length) return null;
+    if (versionId) return versions.find((v) => v.id === versionId) || null;
+    return versions[0] || null;
+}
+
+export function getWorkingVersion() {
+    const wi = state.workingItem;
+    if (!wi) return null;
+    const item = state.itemIndex.get(wi.id);
+    return getCurrentVersion(item, wi.currentVersionId);
 }

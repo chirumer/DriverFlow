@@ -106,8 +106,7 @@ function baseCard(version, item) {
     el.className = "dw-card";
     el.draggable = true;
     const isActive = wi && (
-        (wi.currentVersionId === version.id) ||
-        (wi.currentVersionId == null && version.kind === "raw" && (item.versions || [])[0]?.id === version.id)
+        wi.currentVersionId === version.id
     );
     if (isActive) el.classList.add("active");
     el.addEventListener("dragstart", (e) => {

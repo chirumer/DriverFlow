@@ -37,6 +37,7 @@ class ItemVersion:
     payload: Any
     summary: Dict[str, Any] = field(default_factory=dict)
     extra: Dict[str, Any] = field(default_factory=dict)
+    exported: bool = False
     created_at: float = field(default_factory=time.time)
 
     @classmethod
@@ -64,6 +65,7 @@ class ItemVersion:
             "parent_id": self.parent_id,
             "kind": self.kind,
             "summary": self.summary,
+            "exported": self.exported,
             "created_at": self.created_at,
         }
 
@@ -76,7 +78,6 @@ class WorkspaceItem:
     name: str
     media_type: MediaType
     versions: List[ItemVersion] = field(default_factory=list)
-    exported: bool = False
 
     def has_kind(self, kind: VersionKind) -> bool:
         return any(v.kind == kind for v in self.versions)
@@ -98,11 +99,14 @@ class WorkspaceItem:
     def is_processed(self) -> bool:
         return any(v.kind != "raw" for v in self.versions)
 
+    def is_exported(self) -> bool:
+        return any(v.exported for v in self.versions)
+
     def to_summary_dict(self) -> Dict[str, Any]:
         sources: List[str] = ["raw"]
         if self.is_processed():
             sources.append("processed")
-        if self.exported:
+        if self.is_exported():
             sources.append("exported")
         return {
             "id": self.id,
@@ -153,7 +157,7 @@ class Workspace:
         if source == "processed":
             items = [i for i in items if i.is_processed()]
         elif source == "exported":
-            items = [i for i in items if i.exported]
+            items = [i for i in items if i.is_exported()]
         # source == "raw" includes everything (every item starts with a raw version).
         return items
 
@@ -163,10 +167,13 @@ class Workspace:
             item.versions.append(version)
             return item
 
-    def mark_exported(self, item_id: str) -> None:
+    def mark_exported(self, item_id: str, version_id: str) -> None:
         with self._lock:
             item = self.require(item_id)
-            item.exported = True
+            version = item.get_version(version_id)
+            if version is None:
+                raise KeyError(f"Unknown version id: {version_id}")
+            version.exported = True
 
 
 # Process-wide singleton. Routers import this directly.

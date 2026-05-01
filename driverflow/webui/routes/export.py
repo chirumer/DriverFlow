@@ -39,7 +39,7 @@ async def export_item(item_id: str, version: Optional[str] = None) -> Response:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"Export failed: {e}")
 
-    WORKSPACE.mark_exported(item_id)
+    WORKSPACE.mark_exported(item_id, target.id)
 
     return Response(
         content=payload.body,

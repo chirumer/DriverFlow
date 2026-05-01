@@ -5,7 +5,7 @@ import * as state from "../state.js";
 import { thumbUrl } from "../api.js";
 
 const SECTIONS = [
-    { id: "raw",       label: "Raw Images",     source: "raw" },
+    { id: "raw",       label: "Raw Media",      source: "raw" },
     { id: "processed", label: "Processed",      source: "processed" },
     { id: "exported",  label: "Exported",       source: "exported" },
 ];
@@ -93,11 +93,12 @@ function renderItem(item) {
             } else {
                 state.state.selectedItemIds.add(item.id);
             }
+            render();
         } else {
             state.state.selectedItemIds.clear();
             state.state.selectedItemIds.add(item.id);
+            state.emit("working:replace-request", { itemId: item.id });
         }
-        render();
     });
 
     el.addEventListener("dragstart", (e) => {

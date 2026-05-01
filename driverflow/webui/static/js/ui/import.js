@@ -8,6 +8,7 @@ const fileInput = document.getElementById("file-input");
 const importBtn = document.getElementById("btn-import");
 
 importBtn.addEventListener("click", () => fileInput.click());
+window.addEventListener("driverflow:open-file-picker", () => fileInput.click());
 
 fileInput.addEventListener("change", async () => {
     const files = Array.from(fileInput.files || []);

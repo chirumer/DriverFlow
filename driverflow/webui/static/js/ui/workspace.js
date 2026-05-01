@@ -2,7 +2,7 @@
 // beforeunload guard, and download button.
 
 import * as state from "../state.js";
-import { downloadExport, previewUrl } from "../api.js";
+import { downloadExport, listItems, previewUrl } from "../api.js";
 import { showToast } from "./toast.js";
 import { confirmModal } from "./modal.js";
 
@@ -16,6 +16,15 @@ state.on("version:added", ({ itemId, versionId }) => {
     if (!state.state.workingItem || state.state.workingItem.id !== itemId) return;
     state.state.workingItem.currentVersionId = versionId;
     render();
+});
+state.on("working:replace-request", ({ itemId }) => {
+    tryReplaceWorkingItem(itemId);
+});
+
+previewEl.addEventListener("click", (e) => {
+    if (state.state.workingItem) return;
+    if (!e.target.closest(".empty-state")) return;
+    window.dispatchEvent(new CustomEvent("driverflow:open-file-picker"));
 });
 
 previewEl.addEventListener("dragover", (e) => {
@@ -56,8 +65,7 @@ exportBtn.addEventListener("click", async () => {
     try {
         await downloadExport(wi.id, wi.currentVersionId);
         // Refresh sources so item appears under "exported".
-        const list = await (await fetch("/api/items")).json();
-        state.setItems(list.items || []);
+        state.setItems(await listItems());
     } catch (e) {
         // toast already shown in api.js
     }
@@ -77,6 +85,13 @@ function isItemDrag(e) {
 }
 
 async function tryReplaceWorkingItem(newItemId) {
+    const currentId = state.state.workingItem?.id;
+    if (currentId === newItemId) {
+        const item = state.state.itemIndex.get(newItemId);
+        if (item) state.setWorkingItem(item, null);
+        return;
+    }
+
     if (state.isWorkingDirty()) {
         const ok = await confirmModal({
             title: "Replace working item?",
@@ -102,7 +117,9 @@ function render() {
         return;
     }
 
-    nameEl.textContent = wi.name + (wi.currentVersionId ? "" : " (raw)");
+    const item = state.state.itemIndex.get(wi.id);
+    const current = state.getCurrentVersion(item, wi.currentVersionId);
+    nameEl.textContent = current?.kind === "raw" ? `${wi.name} (raw)` : wi.name;
     exportBtn.disabled = false;
 
     previewEl.innerHTML = "";

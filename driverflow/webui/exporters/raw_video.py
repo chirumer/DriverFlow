@@ -9,6 +9,17 @@ from . import register
 from .base import ExportPayload, Exporter, ExporterError
 
 
+def _media_type_for(name: str) -> str:
+    ext = os.path.splitext(name)[1].lower()
+    return {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska",
+        ".avi": "video/x-msvideo",
+    }.get(ext, "application/octet-stream")
+
+
 class RawVideoExporter(Exporter):
     name = "raw_video"
     handles_kind = "raw"
@@ -26,7 +37,7 @@ class RawVideoExporter(Exporter):
             raise ExporterError("Raw video payload is not exportable.")
         return ExportPayload(
             filename=item.name,
-            media_type="video/mp4",
+            media_type=_media_type_for(item.name),
             body=data,
         )
 

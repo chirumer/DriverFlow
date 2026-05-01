@@ -14,6 +14,17 @@ from ..state import WORKSPACE
 router = APIRouter()
 
 
+def _video_media_type_for(name: str) -> str:
+    ext = os.path.splitext(name)[1].lower()
+    return {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska",
+        ".avi": "video/x-msvideo",
+    }.get(ext, "application/octet-stream")
+
+
 def _preview_bytes_for_version(item, version) -> tuple[bytes, str]:
     """Return (payload_bytes, content_type) for a preview request."""
     media_type = item.media_type
@@ -22,11 +33,12 @@ def _preview_bytes_for_version(item, version) -> tuple[bytes, str]:
     if kind == "raw":
         if media_type == "video":
             payload = version.payload
+            content_type = _video_media_type_for(item.name)
             if isinstance(payload, (bytes, bytearray)):
-                return bytes(payload), "video/mp4"
+                return bytes(payload), content_type
             if isinstance(payload, str) and os.path.exists(payload):
                 with open(payload, "rb") as f:
-                    return f.read(), "video/mp4"
+                    return f.read(), content_type
             raise HTTPException(status_code=500, detail="Unreadable video payload.")
 
         # image raw

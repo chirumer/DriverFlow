@@ -37,12 +37,20 @@ async def run_tool(name: str, body: dict) -> dict:
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
 
+    accepted_kinds = tool.input_kinds
+    if accepted_kinds is None and tool.requires_input_kind is not None:
+        accepted_kinds = (tool.requires_input_kind,)
+
     parent_version_id = body.get("parent_version_id")
     if parent_version_id:
         parent = item.get_version(parent_version_id)
     else:
-        if tool.requires_input_kind:
-            parent = item.latest(tool.requires_input_kind)
+        if accepted_kinds:
+            parent = None
+            for version in reversed(item.versions):
+                if version.kind in accepted_kinds:
+                    parent = version
+                    break
         else:
             parent = item.latest()
     if parent is None:
@@ -54,9 +62,15 @@ async def run_tool(name: str, body: dict) -> dict:
             ),
         )
 
-    if tool.requires_input_kind == "raw" and parent.kind != "raw":
-        # Re-running detect from a derived parent is invalid; force the raw.
-        parent = item.versions[0]
+    if accepted_kinds and parent.kind not in accepted_kinds:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Tool {name!r} requires input kind "
+                f"{' or '.join(repr(k) for k in accepted_kinds)}; "
+                f"got {parent.kind!r}."
+            ),
+        )
 
     if item.media_type not in tool.media_types:
         raise HTTPException(

@@ -58,10 +58,11 @@ function evalGate(tool) {
         const label = tool.requires_model.toUpperCase();
         return { enabled: false, reason: `Load ${label} first.`, missingModel: tool.requires_model };
     }
-    if (tool.requires_input_kind) {
-        const kinds = wi.versions || [];
-        if (!kinds.includes(tool.requires_input_kind)) {
-            return { enabled: false, reason: `Needs ${tool.requires_input_kind} version.` };
+    const current = state.getWorkingVersion();
+    const acceptedKinds = tool.input_kinds || (tool.requires_input_kind ? [tool.requires_input_kind] : []);
+    if (acceptedKinds.length) {
+        if (!current || !acceptedKinds.includes(current.kind)) {
+            return { enabled: false, reason: `Needs ${acceptedKinds.join(" or ")} version.` };
         }
     }
     return { enabled: true };
@@ -197,7 +198,9 @@ async function runWithLoading(tool, params) {
     const loadingId = addLoadingCard(tool);
     state.setRunningTool(tool.name);
     try {
+        const current = state.getWorkingVersion();
         const body = { item_id: wi.id, ...params };
+        if (current) body.parent_version_id = current.id;
         const res = await api.runTool(tool.name, body);
         replaceLoadingCard(loadingId, res.version);
         // Refresh whole items list so sidebars stay in sync.
